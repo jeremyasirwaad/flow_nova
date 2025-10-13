@@ -6,6 +6,7 @@ from uuid import uuid4
 from sqlalchemy import Column, String, DateTime, Boolean
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 
@@ -31,6 +32,9 @@ class User(Base):
     email = Column(String, nullable=False, unique=True)
     is_active = Column(Boolean, default=True, nullable=False)
     is_superuser = Column(Boolean, default=False, nullable=False)
+
+    # Relationship to Workflows
+    workflows = relationship("Workflow", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"User(id={self.id}, first_name={self.first_name}, last_name={self.last_name})"

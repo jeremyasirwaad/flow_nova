@@ -16,7 +16,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.config import settings
 from app.core.database import async_engine, Base
 from app.core.logging import setup_logging
-from app.routes import health, tasks, auth
+from app.routes import health, tasks, auth, workflows
 
 
 @asynccontextmanager
@@ -166,6 +166,7 @@ async def general_exception_handler(request: Request, exc: Exception):
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(tasks.router, prefix="/api", tags=["tasks"])
 app.include_router(auth.router, prefix="/api", tags=["auth"])
+app.include_router(workflows.router, prefix="/api", tags=["workflows"])
 
 # Optional: Enable test error endpoints for development/testing
 # Uncomment the following lines to enable test endpoints

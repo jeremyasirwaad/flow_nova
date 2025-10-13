@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { GridPattern } from "@/components/magicui/grid-pattern";
+import { useAuth } from "@/context/AuthContext";
+import toast from "react-hot-toast";
 import logo from "@/assets/logo.png";
 
 export default function Signup() {
@@ -9,15 +11,40 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { register } = useAuth();
+  const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle signup logic here
-    if (password !== confirmPassword) {
-      alert("Passwords don't match!");
+
+    if (password.length < 8) {
+      toast.error("Password must be at least 8 characters long!");
       return;
     }
-    console.log("Signup:", { firstName, lastName, email, password });
+
+    if (password !== confirmPassword) {
+      toast.error("Passwords don't match!");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      await register({
+        email,
+        first_name: firstName,
+        last_name: lastName,
+        password,
+      });
+      // Redirect to login page after successful registration
+      navigate("/login");
+    } catch (error) {
+      // Error is already handled by the auth context with toast
+      console.error("Signup error:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -114,9 +141,10 @@ export default function Signup() {
                 <div>
                   <input
                     type="password"
-                    placeholder="Password"
+                    placeholder="Password (min. 8 characters)"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    minLength={8}
                     className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     required
                   />
@@ -135,9 +163,17 @@ export default function Signup() {
 
                 <button
                   type="submit"
-                  className="w-full rounded-lg bg-gray-900 px-4 py-3 text-sm font-semibold text-white hover:bg-gray-800 transition-colors"
+                  disabled={loading}
+                  className="w-full rounded-lg bg-gray-900 px-4 py-3 text-sm font-semibold text-white hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Create Account
+                  {loading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Creating Account...</span>
+                    </>
+                  ) : (
+                    "Create Account"
+                  )}
                 </button>
               </form>
 

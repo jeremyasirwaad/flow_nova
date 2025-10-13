@@ -1,16 +1,36 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { GridPattern } from "@/components/magicui/grid-pattern";
+import { useAuth } from "@/context/AuthContext";
+import toast from "react-hot-toast";
 import logo from "@/assets/logo.png";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle login logic here
-    console.log("Login:", { email, password });
+
+    if (password.length < 8) {
+      toast.error("Password must be at least 8 characters long!");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      await login({ email, password });
+      navigate("/app/dashboard");
+    } catch (error) {
+      // Error is already handled by the auth context with toast
+      console.error("Login error:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -84,9 +104,10 @@ export default function Login() {
                 <div>
                   <input
                     type="password"
-                    placeholder="Password"
+                    placeholder="Password (min. 8 characters)"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    minLength={8}
                     className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     required
                   />
@@ -94,9 +115,17 @@ export default function Login() {
 
                 <button
                   type="submit"
-                  className="w-full rounded-lg bg-gray-900 px-4 py-3 text-sm font-semibold text-white hover:bg-gray-800 transition-colors"
+                  disabled={loading}
+                  className="w-full rounded-lg bg-gray-900 px-4 py-3 text-sm font-semibold text-white hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Login Now
+                  {loading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Logging in...</span>
+                    </>
+                  ) : (
+                    "Login Now"
+                  )}
                 </button>
               </form>
 
