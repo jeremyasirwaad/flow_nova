@@ -18,9 +18,11 @@
           uvicorn
           pydantic
           pydantic-settings
+          email-validator
           python-multipart
           python-jose
           passlib
+          bcrypt
 
           # Database
           psycopg2
@@ -28,8 +30,10 @@
           alembic
           asyncpg
 
-          # Redis
+          # Redis and RQ
           redis
+          rq
+          # Note: rq-scheduler is not available in nixpkgs, but can be used via pip if needed
 
           # HTTP clients
           httpx
@@ -59,6 +63,7 @@
           buildInputs = with pkgs; [
             # Python environment
             pythonEnv
+            python312Packages.pip
 
             # Node.js for React frontend
             nodejs_20
