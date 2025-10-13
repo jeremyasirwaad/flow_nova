@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Integer
+from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Integer, Float
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
@@ -25,8 +25,8 @@ class WorkflowNode(Base):
     )
 
     name = Column(String, nullable=False)
-    x_pos = Column(Integer)
-    y_pos = Column(Integer)
+    x_pos = Column(Float)
+    y_pos = Column(Float)
     data = Column(JSONB)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

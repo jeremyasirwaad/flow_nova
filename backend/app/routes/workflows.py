@@ -166,21 +166,26 @@ async def update_workflow(
         incoming_node_ids = {node.id for node in workflow_data.nodes if node.id is not None}
 
         # Hard delete nodes that are not in the incoming list
-        for node in workflow.workflow_nodes:
+        for node in list(workflow.workflow_nodes):
             if node.id not in incoming_node_ids:
                 await db.delete(node)
+
+        # Flush deletes
+        await db.flush()
 
         # Update or create nodes
         for node_data in workflow_data.nodes:
             if node_data.id and node_data.id in existing_node_ids:
-                # Update existing node
-                for node in workflow.workflow_nodes:
-                    if node.id == node_data.id:
-                        node.name = node_data.name
-                        node.x_pos = node_data.x_pos
-                        node.y_pos = node_data.y_pos
-                        node.data = node_data.data
-                        break
+                # Update existing node - fetch it from DB to ensure we have the right instance
+                result = await db.execute(
+                    select(WorkflowNode).where(WorkflowNode.id == node_data.id)
+                )
+                node = result.scalar_one_or_none()
+                if node:
+                    node.name = node_data.name
+                    node.x_pos = node_data.x_pos
+                    node.y_pos = node_data.y_pos
+                    node.data = node_data.data
             else:
                 # Create new node
                 new_node = WorkflowNode(
@@ -194,35 +199,36 @@ async def update_workflow(
 
     # Handle edges update
     if workflow_data.edges is not None:
-        # Get existing edge IDs
-        existing_edge_ids = {edge.id for edge in workflow.workflow_edges}
-        incoming_edge_ids = {edge.id for edge in workflow_data.edges if edge.id is not None}
-
-        # Hard delete edges that are not in the incoming list
+        # Delete ALL existing edges first
         for edge in workflow.workflow_edges:
-            if edge.id not in incoming_edge_ids:
-                await db.delete(edge)
+            await db.delete(edge)
 
-        # Update or create edges
+        # Flush to ensure deletes are processed
+        await db.flush()
+
+        # Create all new edges
         for edge_data in workflow_data.edges:
-            if edge_data.id and edge_data.id in existing_edge_ids:
-                # Update existing edge
-                for edge in workflow.workflow_edges:
-                    if edge.id == edge_data.id:
-                        edge.source = edge_data.source
-                        edge.target = edge_data.target
-                        break
-            else:
-                # Create new edge
-                new_edge = WorkflowEdge(
-                    source=edge_data.source,
-                    target=edge_data.target,
-                    workflow_id=workflow_id,
-                )
-                db.add(new_edge)
+            new_edge = WorkflowEdge(
+                source=edge_data.source,
+                target=edge_data.target,
+                source_handle=edge_data.source_handle,
+                target_handle=edge_data.target_handle,
+                workflow_id=workflow_id,
+            )
+            db.add(new_edge)
 
     await db.commit()
-    await db.refresh(workflow)
+
+    # Fetch the workflow again with all nodes and edges loaded
+    result = await db.execute(
+        select(Workflow)
+        .options(
+            selectinload(Workflow.workflow_nodes),
+            selectinload(Workflow.workflow_edges)
+        )
+        .where(Workflow.id == workflow_id)
+    )
+    workflow = result.scalar_one()
 
     return workflow
 

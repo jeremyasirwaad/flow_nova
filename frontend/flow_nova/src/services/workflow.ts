@@ -13,8 +13,10 @@ export interface WorkflowNode {
 
 export interface WorkflowEdge {
   id: string;
-  source_node_id: string;
-  target_node_id: string;
+  source: string;
+  target: string;
+  source_handle?: string | null;
+  target_handle?: string | null;
   workflow_id: string;
   created_at: string;
   updated_at: string | null;
@@ -37,6 +39,28 @@ export interface WorkflowWithDetails extends Workflow {
 export interface CreateWorkflowData {
   name: string;
   description?: string;
+}
+
+export interface UpdateWorkflowNodeData {
+  id: string;
+  name: string;
+  x_pos: number;
+  y_pos: number;
+  data: Record<string, any>;
+}
+
+export interface UpdateWorkflowEdgeData {
+  source: string;
+  target: string;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
+}
+
+export interface UpdateWorkflowData {
+  name: string;
+  description?: string;
+  nodes: UpdateWorkflowNodeData[];
+  edges: UpdateWorkflowEdgeData[];
 }
 
 class WorkflowService {
@@ -114,6 +138,27 @@ class WorkflowService {
       }));
       throw new Error(error.detail || "Failed to delete workflow");
     }
+  }
+
+  async updateWorkflow(
+    workflowId: string,
+    data: UpdateWorkflowData,
+    token: string
+  ): Promise<WorkflowWithDetails> {
+    const response = await fetch(`${API_URL}/api/workflows/${workflowId}`, {
+      method: "PUT",
+      headers: this.getAuthHeaders(token),
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({
+        detail: "Failed to update workflow",
+      }));
+      throw new Error(error.detail || "Failed to update workflow");
+    }
+
+    return response.json();
   }
 }
 

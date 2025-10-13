@@ -11,8 +11,8 @@ class WorkflowNodeCreate(BaseModel):
     """Schema for creating/updating a workflow node."""
     id: Optional[UUID] = None  # If provided, update existing; if None, create new
     name: str = Field(..., min_length=1, max_length=255)
-    x_pos: Optional[int] = None
-    y_pos: Optional[int] = None
+    x_pos: Optional[float] = None
+    y_pos: Optional[float] = None
     data: Optional[Dict[str, Any]] = None
 
 
@@ -22,8 +22,8 @@ class WorkflowNodeResponse(BaseModel):
 
     id: UUID
     name: str
-    x_pos: Optional[int]
-    y_pos: Optional[int]
+    x_pos: Optional[float]
+    y_pos: Optional[float]
     data: Optional[Dict[str, Any]]
     workflow_id: UUID
     created_at: datetime
@@ -32,9 +32,13 @@ class WorkflowNodeResponse(BaseModel):
 
 class WorkflowEdgeCreate(BaseModel):
     """Schema for creating/updating a workflow edge."""
+    model_config = ConfigDict(populate_by_name=True)
+
     id: Optional[UUID] = None  # If provided, update existing; if None, create new
     source: str = Field(..., min_length=1)
     target: str = Field(..., min_length=1)
+    source_handle: Optional[str] = Field(None, alias="sourceHandle")
+    target_handle: Optional[str] = Field(None, alias="targetHandle")
 
 
 class WorkflowEdgeResponse(BaseModel):
@@ -44,6 +48,8 @@ class WorkflowEdgeResponse(BaseModel):
     id: UUID
     source: str
     target: str
+    source_handle: Optional[str]
+    target_handle: Optional[str]
     workflow_id: UUID
     created_at: datetime
     updated_at: Optional[datetime]
