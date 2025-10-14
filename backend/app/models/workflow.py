@@ -38,6 +38,10 @@ class Workflow(Base):
     # Relationships to WorkflowNodes and WorkflowEdges
     workflow_nodes = relationship("WorkflowNode", back_populates="workflow", cascade="all, delete-orphan")
     workflow_edges = relationship("WorkflowEdge", back_populates="workflow", cascade="all, delete-orphan")
+
+    # Relationships to WorkflowRuns and WorkflowLedger
+    workflow_runs = relationship("WorkflowRun", back_populates="workflow", cascade="all, delete-orphan")
+    ledger_entries = relationship("WorkflowLedger", back_populates="workflow", cascade="all, delete-orphan")
     
 
     def __repr__(self):

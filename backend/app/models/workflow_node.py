@@ -34,6 +34,10 @@ class WorkflowNode(Base):
 
     # Relationship back to Workflow
     workflow = relationship("Workflow", back_populates="workflow_nodes")
+
+    # Relationships to WorkflowRuns and WorkflowLedger
+    workflow_runs = relationship("WorkflowRun", back_populates="node")
+    ledger_entries = relationship("WorkflowLedger", back_populates="node")
     
 
     def __repr__(self):

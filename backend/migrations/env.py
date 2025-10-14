@@ -9,7 +9,16 @@ from alembic import context
 # Import the Base metadata and all models
 from app.core.database import Base
 from app.core.config import settings
-from app.models import task, user  # Import ALL models here - this is required!
+# Import ALL models here - this is required for Alembic to detect schema changes!
+from app.models import (
+    task,
+    user,
+    workflow,
+    workflow_node,
+    workflow_edge,
+    workflow_runs,
+    workflow_ledger,
+)
 
 # this is the Alembic Config object
 config = context.config

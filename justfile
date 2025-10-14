@@ -44,6 +44,10 @@ migrate-current:
 migrate-history:
     cd backend && alembic history
 
+# Start RQ worker for node-runner queue
+worker:
+    cd backend && OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES rq worker node-runner --url ${REDIS_URL:-redis://localhost:6379/1}
+
 
 
 
