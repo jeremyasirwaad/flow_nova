@@ -558,16 +558,6 @@ Returns:
 
 ---
 
-## 🤝 Contributing
-
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
-- Code style guidelines
-- Development workflow
-- Testing requirements
-- Pull request process
-
----
-
 ## 📜 License
 
 [MIT License](LICENSE) - Feel free to use FlowNova for commercial and non-commercial projects.
