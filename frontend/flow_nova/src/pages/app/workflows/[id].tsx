@@ -106,6 +106,7 @@ export default function WorkflowEditor() {
     nodeId: "",
   });
   const [isApprovingNode, setIsApprovingNode] = useState(false);
+  const autoSaveTimeoutRef = useRef<number | null>(null);
 
   // WebSocket connection callbacks
   const handleWebSocketConnected = useCallback(() => {
@@ -315,7 +316,10 @@ export default function WorkflowEditor() {
   };
 
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
+    (params: Connection) => {
+      setEdges((eds) => addEdge(params, eds));
+      // Auto-save will be triggered by useEffect watching edges
+    },
     [setEdges]
   );
 
@@ -344,6 +348,7 @@ export default function WorkflowEditor() {
         })
       );
       toast.success("Node updated successfully");
+      // Auto-save will be triggered by useEffect watching nodes
     },
     [setNodes]
   );
@@ -406,6 +411,7 @@ export default function WorkflowEditor() {
 
       setNodes((nds) => nds.concat(newNode));
       toast.success(`${nodeLabel} added to canvas`);
+      // Auto-save will be triggered by useEffect watching nodes
     },
     [reactFlowInstance, setNodes]
   );
@@ -439,6 +445,47 @@ export default function WorkflowEditor() {
       })
     );
   }, [setNodes]);
+
+  // Silent save without toast notifications
+  const saveWorkflowSilent = useCallback(async () => {
+    if (!token || !id || !workflow) return;
+
+    try {
+      // Transform React Flow nodes to API format
+      const apiNodes = nodes.map((node) => ({
+        id: node.id,
+        name: node.data.label || "Unnamed Node",
+        x_pos: node.position.x,
+        y_pos: node.position.y,
+        data: node.data,
+      }));
+
+      // Transform React Flow edges to API format
+      const apiEdges = edges.map((edge) => ({
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: edge.sourceHandle || null,
+        targetHandle: edge.targetHandle || null,
+      }));
+
+      const updateData = {
+        name: workflow.name,
+        description: workflow.description || "",
+        nodes: apiNodes,
+        edges: apiEdges,
+      };
+
+      const updatedWorkflow = await workflowService.updateWorkflow(
+        id,
+        updateData,
+        token
+      );
+
+      setWorkflow(updatedWorkflow);
+    } catch (error) {
+      console.error("Failed to save workflow:", error);
+    }
+  }, [token, id, workflow, nodes, edges]);
 
   const handleSaveWorkflow = useCallback(async () => {
     if (!token || !id || !workflow) return;
@@ -518,6 +565,29 @@ export default function WorkflowEditor() {
       }))
     );
   }, [nodeExecutionStatus, setNodes]);
+
+  // Auto-save workflow when nodes or edges change (debounced)
+  useEffect(() => {
+    // Don't auto-save if we're still loading or if there's no workflow
+    if (loading || !workflow) return;
+
+    // Clear existing timeout
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    // Set new timeout for auto-save (500ms debounce)
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      saveWorkflowSilent();
+    }, 500);
+
+    // Cleanup on unmount
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [nodes, edges, loading, workflow, saveWorkflowSilent]);
 
   if (loading) {
     return (
