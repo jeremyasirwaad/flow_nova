@@ -18,6 +18,31 @@ export default function RunWorkflowModal({
 
   if (!isOpen) return null;
 
+  // Get workflow-specific example based on workflow name
+  const getExampleForWorkflow = () => {
+    const name = workflowName.toLowerCase();
+
+    if (name.includes("content summarizer")) {
+      return {
+        article_text: "An adult tree can absorb about 22 kilograms of carbon per year, according to the European Environment Agency. With newer research suggesting that only a third of the previously estimated trees (around 330 billion) may be needed to cool the planet by 1°C, the case for growing trees offers hope in a time when an increasingly erratic climate desperately needs solutions."
+      };
+    } else if (name.includes("age validator")) {
+      return { age: 18 };
+    } else if (name.includes("user approval")) {
+      return { start: "none" };
+    } else if (name.includes("customer support") || name.includes("ticket handler")) {
+      return { input: "Go kill yourself" };
+    } else {
+      // Default example
+      return {
+        test_param: "hello world",
+        user_id: "12345"
+      };
+    }
+  };
+
+  const exampleData = getExampleForWorkflow();
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -30,6 +55,11 @@ export default function RunWorkflowModal({
     } catch (err) {
       setError("Invalid JSON format. Please check your input.");
     }
+  };
+
+  const handleUseExample = () => {
+    setJsonInput(JSON.stringify(exampleData, null, 2));
+    setError(null);
   };
 
   const handleClose = () => {
@@ -103,14 +133,20 @@ export default function RunWorkflowModal({
             )}
 
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <h4 className="text-sm font-medium text-blue-900 mb-1">
-                Example:
-              </h4>
-              <pre className="text-xs text-blue-800 font-mono">
-                {`{
-  "test_param": "hello world",
-  "user_id": "12345"
-}`}
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-medium text-blue-900">
+                  Example:
+                </h4>
+                <button
+                  type="button"
+                  onClick={handleUseExample}
+                  className="text-xs text-blue-700 hover:text-blue-900 font-medium underline"
+                >
+                  Use this example
+                </button>
+              </div>
+              <pre className="text-xs text-blue-800 font-mono whitespace-pre-wrap break-words">
+                {JSON.stringify(exampleData, null, 2)}
               </pre>
             </div>
           </div>

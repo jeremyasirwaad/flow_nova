@@ -314,57 +314,52 @@ export default function WorkflowEditor() {
     }
   };
 
-  // Silent save without toast notifications - MUST be defined before callbacks that use it
-  const saveWorkflowSilent = useCallback(async () => {
-    if (!token || !id || !workflow) return;
-
-    try {
-      // Transform React Flow nodes to API format
-      const apiNodes = nodes.map((node) => ({
-        id: node.id,
-        name: node.data.label || "Unnamed Node",
-        x_pos: node.position.x,
-        y_pos: node.position.y,
-        data: node.data,
-      }));
-
-      // Transform React Flow edges to API format
-      const apiEdges = edges.map((edge) => ({
-        source: edge.source,
-        target: edge.target,
-        sourceHandle: edge.sourceHandle || null,
-        targetHandle: edge.targetHandle || null,
-      }));
-
-      const updateData = {
-        name: workflow.name,
-        description: workflow.description || "",
-        nodes: apiNodes,
-        edges: apiEdges,
-      };
-
-      const updatedWorkflow = await workflowService.updateWorkflow(
-        id,
-        updateData,
-        token
-      );
-
-      setWorkflow(updatedWorkflow);
-    } catch (error) {
-      console.error("Failed to save workflow:", error);
-    }
-  }, [token, id, workflow, nodes, edges]);
 
   const onConnect = useCallback(
     (params: Connection) => {
-      setEdges((eds) => addEdge(params, eds));
+      setEdges((eds) => {
+        const updatedEdges = addEdge(params, eds);
 
-      // Auto-save after edge connection
-      setTimeout(() => {
-        saveWorkflowSilent();
-      }, 100);
+        // Auto-save after edge connection with the updated edges
+        setTimeout(() => {
+          if (!token || !id || !workflow) return;
+
+          const apiNodes = nodes.map((node) => ({
+            id: node.id,
+            name: node.data.label || "Unnamed Node",
+            x_pos: node.position.x,
+            y_pos: node.position.y,
+            data: node.data,
+          }));
+
+          const apiEdges = updatedEdges.map((edge) => ({
+            source: edge.source,
+            target: edge.target,
+            sourceHandle: edge.sourceHandle || null,
+            targetHandle: edge.targetHandle || null,
+          }));
+
+          const updateData = {
+            name: workflow.name,
+            description: workflow.description || "",
+            nodes: apiNodes,
+            edges: apiEdges,
+          };
+
+          workflowService
+            .updateWorkflow(id, updateData, token)
+            .then((updatedWorkflow) => {
+              setWorkflow(updatedWorkflow);
+            })
+            .catch((error) => {
+              console.error("Failed to save workflow:", error);
+            });
+        }, 100);
+
+        return updatedEdges;
+      });
     },
-    [setEdges, saveWorkflowSilent]
+    [setEdges, token, id, workflow, nodes]
   );
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
@@ -491,15 +486,51 @@ export default function WorkflowEditor() {
         },
       };
 
-      setNodes((nds) => nds.concat(newNode));
-      toast.success(`${nodeLabel} added to canvas`);
+      setNodes((nds) => {
+        const updatedNodes = nds.concat(newNode);
 
-      // Auto-save after node drop
-      setTimeout(() => {
-        saveWorkflowSilent();
-      }, 100);
+        // Auto-save after node drop with the updated nodes
+        setTimeout(() => {
+          if (!token || !id || !workflow) return;
+
+          const apiNodes = updatedNodes.map((node) => ({
+            id: node.id,
+            name: node.data.label || "Unnamed Node",
+            x_pos: node.position.x,
+            y_pos: node.position.y,
+            data: node.data,
+          }));
+
+          const apiEdges = edges.map((edge) => ({
+            source: edge.source,
+            target: edge.target,
+            sourceHandle: edge.sourceHandle || null,
+            targetHandle: edge.targetHandle || null,
+          }));
+
+          const updateData = {
+            name: workflow.name,
+            description: workflow.description || "",
+            nodes: apiNodes,
+            edges: apiEdges,
+          };
+
+          workflowService
+            .updateWorkflow(id, updateData, token)
+            .then((updatedWorkflow) => {
+              setWorkflow(updatedWorkflow);
+            })
+            .catch((error) => {
+              console.error("Failed to save workflow:", error);
+            });
+        }, 100);
+
+        return updatedNodes;
+      });
+
+      toast.success(`${nodeLabel} added to canvas`);
     },
-    [reactFlowInstance, setNodes, saveWorkflowSilent]
+    [reactFlowInstance, setNodes, token, id, workflow, edges]
   );
 
   // Handle ledger updates from the history panel

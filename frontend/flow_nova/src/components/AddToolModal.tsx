@@ -179,13 +179,20 @@ export default function AddToolModal({
                   type="text"
                   id="name"
                   value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
+                  onChange={(e) => {
+                    // Convert to lowercase and replace spaces with underscores
+                    const formattedName = e.target.value
+                      .toLowerCase()
+                      .replace(/\s+/g, '_');
+                    setFormData({ ...formData, name: formattedName });
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="e.g., Weather API"
+                  placeholder="e.g., weather_api"
                   required
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Name will be automatically formatted: lowercase with underscores
+                </p>
               </div>
 
               {/* Description */}
