@@ -228,34 +228,267 @@ Frontend WebSocket ← Redis Pub/Sub ← Event Publisher ← Node Handlers
 10. publish_run_completed() → Frontend shows completion
 ```
 
-### Data Flow: Variable Interpolation & Context
+### Data Flow: Output Accumulation Architecture
+
+**FlowNova uses an innovative output accumulation pattern** where each node's output is merged with its input, creating a growing context object that flows through the entire workflow.
+
+#### The Core Pattern: `ctx.output = {**ctx.input, **new_data}`
+
+Every node handler follows this pattern:
 
 ```python
-# Start Node
-input_data = {"user_query": "What's the weather?"}
+# Node receives input from previous node
+ctx.input = {...}  # All accumulated data from previous nodes
 
-# Agent Node (system prompt with variable interpolation)
-system_prompt = "Answer this query: {{input.user_query}}"
-# Resolves to: "Answer this query: What's the weather?"
+# Node processes and generates new data
+new_data = {"result": "some value"}
 
-# Agent calls tool: get_weather(location="San Francisco")
-tool_response = {"temperature": 72, "condition": "Sunny"}
+# Node merges input + new output (output accumulation)
+ctx.output = {**ctx.input, **new_data}
 
-# Agent output
-agent_output = {
-    "response": "It's 72°F and sunny in San Francisco",
-    "tool_calls": [...]
+# ctx.output becomes ctx.input for the next node
+next_node.input = ctx.output
+```
+
+This means:
+- **Data never gets lost** - Previous node outputs are preserved
+- **Variables are always accessible** - Use `{{input.field_name}}` to reference any previous node's output
+- **Context grows** - Each node adds to the accumulated context
+- **Full lineage** - By the end of the workflow, you have all intermediate results
+
+#### Example: Multi-Step Data Accumulation
+
+```python
+# START NODE
+# Input: Initial workflow input
+input_data = {"user_query": "What's the weather in SF?"}
+# Output: Passes through unchanged
+output = {"user_query": "What's the weather in SF?"}
+
+# ──────────────────────────────────────────────────
+
+# AGENT NODE 1: Extract Location
+# Input: Receives start node's output
+ctx.input = {"user_query": "What's the weather in SF?"}
+
+# Agent extracts location using LLM
+extracted = {"location": "San Francisco", "intent": "weather_query"}
+
+# Output: Merges input + extraction
+ctx.output = {
+    **ctx.input,  # {"user_query": "What's the weather in SF?"}
+    **extracted   # {"location": "San Francisco", "intent": "weather_query"}
+}
+# Result: {
+#   "user_query": "What's the weather in SF?",
+#   "location": "San Francisco",
+#   "intent": "weather_query"
+# }
+
+# ──────────────────────────────────────────────────
+
+# AGENT NODE 2: Get Weather Data
+# Input: Receives previous agent's output
+ctx.input = {
+    "user_query": "What's the weather in SF?",
+    "location": "San Francisco",
+    "intent": "weather_query"
 }
 
-# If/Else Node (condition check)
-if agent_output.temperature > 70:
-    route = "true"  # Hot weather path
-else:
-    route = "false"  # Cold weather path
+# System prompt with variable interpolation:
+system_prompt = "Get weather for {{input.location}}"
+# Resolves to: "Get weather for San Francisco"
 
-# Data flows through edges to next nodes
-next_node.input = agent_output  # Output becomes input
+# Agent calls tool: get_weather(location="San Francisco")
+tool_response = {"temperature": 72, "condition": "Sunny", "humidity": 65}
+
+# Output: Merges input + weather data
+ctx.output = {
+    **ctx.input,  # All previous data
+    "message": "It's 72°F and sunny in San Francisco",
+    "weather": tool_response,
+    "tool_calls": [{"tool": "get_weather", "args": {...}}]
+}
+# Result: {
+#   "user_query": "What's the weather in SF?",
+#   "location": "San Francisco",
+#   "intent": "weather_query",
+#   "message": "It's 72°F and sunny in San Francisco",
+#   "weather": {"temperature": 72, "condition": "Sunny", "humidity": 65},
+#   "tool_calls": [...]
+# }
+
+# ──────────────────────────────────────────────────
+
+# IF/ELSE NODE: Check Temperature
+# Input: Receives agent's output
+ctx.input = {
+    "user_query": "What's the weather in SF?",
+    "location": "San Francisco",
+    "weather": {"temperature": 72, "condition": "Sunny"},
+    "message": "It's 72°F and sunny..."
+}
+
+# Condition: {{input.weather.temperature}} > 70
+# Extracts: ctx.input["weather"]["temperature"] = 72
+# Evaluates: 72 > 70 = True
+
+# Output: Merges input + condition result
+ctx.output = {
+    **ctx.input,  # All previous data
+    "condition": True,
+    "lhs_value": 72,
+    "rhs_value": 70,
+    "operator": ">"
+}
+
+# Routes to "true" branch (hot weather path)
+
+# ──────────────────────────────────────────────────
+
+# AGENT NODE 3: Generate Response
+# Input: Full accumulated context
+ctx.input = {
+    "user_query": "What's the weather in SF?",
+    "location": "San Francisco",
+    "weather": {"temperature": 72, ...},
+    "condition": True,
+    "message": "It's 72°F and sunny..."
+}
+
+# System prompt can reference ANY previous data:
+system_prompt = """
+Given the user asked: {{input.user_query}}
+The weather in {{input.location}} is {{input.message}}
+The temperature check (>70°F) was: {{input.condition}}
+
+Generate a friendly response suggesting outdoor activities.
+"""
+
+# Resolves to full context-aware prompt with all historical data
+
+# Output: Final response with full lineage
+ctx.output = {
+    **ctx.input,  # ENTIRE workflow history
+    "final_response": "It's a beautiful sunny day in San Francisco! Perfect for...",
+    "suggestions": ["visit Golden Gate Park", "go to the beach"]
+}
+
+# ──────────────────────────────────────────────────
+
+# END NODE
+# Receives complete accumulated output with full workflow history
+# This becomes the workflow run's final output
 ```
+
+#### Variable Interpolation: Accessing Accumulated Data
+
+Use `{{input.field_name}}` or `{{input.nested.field}}` in any node configuration:
+
+```python
+# Access top-level fields
+{{input.user_query}}          # → "What's the weather in SF?"
+{{input.location}}             # → "San Francisco"
+
+# Access nested fields
+{{input.weather.temperature}}  # → 72
+{{input.weather.condition}}    # → "Sunny"
+
+# Access array elements
+{{input.suggestions.0}}        # → "visit Golden Gate Park"
+
+# Use in prompts
+system_prompt = """
+User location: {{input.location}}
+Temperature: {{input.weather.temperature}}°F
+Previous message: {{input.message}}
+"""
+
+# Use in conditions (If/Else nodes)
+lhs = "{{input.weather.temperature}}"  # Extracts: 72
+rhs = "70"
+operator = ">"  # Evaluates: 72 > 70 = True
+```
+
+#### Why This Pattern is Powerful
+
+1. **No Data Loss**: Every node's output is preserved through the workflow
+2. **Context-Aware Agents**: Later nodes can reference any earlier node's output
+3. **Debugging**: Full data lineage in the ledger for each node
+4. **Dynamic Workflows**: Conditions can check any accumulated field
+5. **Tool Chaining**: Agent 1's tool results available to Agent 2
+6. **Audit Trail**: Complete input/output at every step
+
+#### Code Implementation
+
+In `backend/app/engine/engine.py:290-292`:
+
+```python
+# After node execution completes
+ctx, next_nodes = handlers[node_type](node, ctx)
+
+# Pass ctx.output to next nodes - this is the key!
+for next_node_id in next_nodes:
+    q.enqueue(run_node, workflow_id, next_node_id, user_id, ctx.output, run_id)
+    #                                                    ^^^^^^^^^^
+    #                            Current output becomes next input
+```
+
+In `backend/app/engine/node_handler.py` (example from agent_handler):
+
+```python
+# Agent node handler
+def agent_handler(node, ctx):
+    # Process with LLM
+    response = completion(model=llm_model, messages=messages, ...)
+
+    # Merge input + new data (OUTPUT ACCUMULATION)
+    ctx.output = {
+        **ctx.input,  # ← Preserve all previous data
+        "message": response.content,
+        "tool_calls": tool_calls_info
+    }
+
+    return ctx, next_nodes
+```
+
+This pattern is consistent across **all node types**: start, agent, if_else, guardrails, fork, user_approval, and cognitive nodes.
+
+#### Example: Referencing Previous Nodes
+
+```
+[Start: {"order_id": "12345"}]
+    ↓
+[Agent 1: Check Order Status]
+    → Output: {
+        "order_id": "12345",
+        "status": "shipped",
+        "tracking": "ABC123"
+      }
+    ↓
+[If/Else: {{input.status}} == "shipped"]
+    → True branch
+    ↓
+[Agent 2: Get Tracking Info]
+    → System Prompt: "Get tracking for {{input.tracking}}"
+    → Output: {
+        "order_id": "12345",
+        "status": "shipped",
+        "tracking": "ABC123",
+        "tracking_details": {...}
+      }
+    ↓
+[Agent 3: Generate Email]
+    → System Prompt: """
+        Order {{input.order_id}} is {{input.status}}.
+        Tracking: {{input.tracking}}
+        Details: {{input.tracking_details}}
+        Draft a customer email.
+      """
+    → Has access to ALL previous data!
+```
+
+This architecture enables **true context-aware orchestration** where every node has full visibility into the workflow's history.
 
 ---
 
