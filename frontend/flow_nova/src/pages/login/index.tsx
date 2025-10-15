@@ -128,21 +128,6 @@ export default function Login() {
                   )}
                 </button>
               </form>
-
-              <div className="space-y-2">
-                <div className="text-center">
-                  <Link
-                    to="/forgot-password"
-                    className="text-sm text-gray-600 hover:text-gray-900"
-                  >
-                    Forgot password?{" "}
-                    <span className="font-semibold">Click here</span>
-                  </Link>
-                </div>
-                <p className="text-xs text-center text-gray-500">
-                  Takes less than a minute.
-                </p>
-              </div>
             </div>
           </div>
         </div>
