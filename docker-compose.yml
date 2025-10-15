@@ -140,6 +140,8 @@ services:
       # External services
       MODELS_SERVICE_URL: http://litellm:4000/v1/models
       MODELS_SERVICE_API_KEY: ${LITELLM_MASTER_KEY}
+      # CORS
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3001,http://localhost:3000}
     ports:
       - "${APP_PORT:-8000}:8000"
     depends_on:
@@ -342,6 +344,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+        VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:8000}
     container_name: flownova_frontend
     ports:
       - "3001:80"

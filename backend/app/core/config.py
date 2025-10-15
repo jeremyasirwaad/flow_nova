@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     models_service_url: str = "http://localhost:4000/v1/models"
     models_service_api_key: Optional[str] = None
 
+    # CORS - comma-separated list of allowed origins
+    cors_origins: str = "http://localhost:3001,http://localhost:3000"
+
     model_config = SettingsConfigDict(
         env_file="../.env",
         env_file_encoding="utf-8",
@@ -68,6 +71,11 @@ class Settings(BaseSettings):
     def redis_url(self) -> str:
         """Get the Redis URL for RQ."""
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Get CORS origins as a list."""
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
 
 @lru_cache()

@@ -1,13 +1,20 @@
-import { Outlet, NavLink } from "react-router";
+import { Outlet, NavLink, useNavigate } from "react-router";
 import logo from "@/assets/logo.png";
 import { MdSpaceDashboard } from "react-icons/md";
 import { LuWorkflow } from "react-icons/lu";
 import { GiToolbox } from "react-icons/gi";
 import { FaGithub } from "react-icons/fa";
+import { IoLogOut } from "react-icons/io5";
 import { useAuth } from "@/context/AuthContext";
 
 export default function AppLayout() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   const navItems = [
     { name: "Dashboard", path: "/app/dashboard", icon: <MdSpaceDashboard /> },
@@ -57,7 +64,7 @@ export default function AppLayout() {
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-gray-200">
+        <div className="p-4 border-t border-gray-200 space-y-1">
           <a
             href="https://github.com/jeremyasirwaad/flow_nova"
             target="_blank"
@@ -67,6 +74,13 @@ export default function AppLayout() {
             <FaGithub className="text-xl" />
             <span>View on GitHub</span>
           </a>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
+          >
+            <IoLogOut className="text-xl" />
+            <span>Logout</span>
+          </button>
         </div>
       </aside>
 

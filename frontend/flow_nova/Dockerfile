@@ -5,9 +5,11 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Build arg for API URL
+# Build args for API and WebSocket URLs
 ARG VITE_API_URL=http://localhost:8000
+ARG VITE_WS_URL=ws://localhost:8000
 ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_WS_URL=${VITE_WS_URL}
 
 # Copy package files
 COPY package*.json ./

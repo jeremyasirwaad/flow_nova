@@ -107,7 +107,7 @@ async def log_requests(request: Request, call_next):
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure this properly in production
+    allow_origins=settings.cors_origins_list,  # Configured via CORS_ORIGINS environment variable
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
