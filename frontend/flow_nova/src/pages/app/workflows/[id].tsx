@@ -383,22 +383,56 @@ export default function WorkflowEditor() {
 
   const handleNodeUpdate = useCallback(
     (nodeId: string, data: any) => {
-      setNodes((nds) =>
-        nds.map((node) => {
+      setNodes((nds) => {
+        const updatedNodes = nds.map((node) => {
           if (node.id === nodeId) {
             return { ...node, data: { ...node.data, ...data } };
           }
           return node;
-        })
-      );
-      toast.success("Node updated successfully");
+        });
 
-      // Auto-save after node update
-      setTimeout(() => {
-        saveWorkflowSilent();
-      }, 100);
+        // Auto-save after node update with the updated nodes
+        setTimeout(() => {
+          if (!token || !id || !workflow) return;
+
+          const apiNodes = updatedNodes.map((node) => ({
+            id: node.id,
+            name: node.data.label || "Unnamed Node",
+            x_pos: node.position.x,
+            y_pos: node.position.y,
+            data: node.data,
+          }));
+
+          const apiEdges = edges.map((edge) => ({
+            source: edge.source,
+            target: edge.target,
+            sourceHandle: edge.sourceHandle || null,
+            targetHandle: edge.targetHandle || null,
+          }));
+
+          const updateData = {
+            name: workflow.name,
+            description: workflow.description || "",
+            nodes: apiNodes,
+            edges: apiEdges,
+          };
+
+          workflowService
+            .updateWorkflow(id, updateData, token)
+            .then((updatedWorkflow) => {
+              setWorkflow(updatedWorkflow);
+            })
+            .catch((error) => {
+              console.error("Failed to save workflow:", error);
+            });
+        }, 100);
+
+        return updatedNodes;
+      });
+
+      toast.success("Node updated successfully");
     },
-    [setNodes, saveWorkflowSilent]
+    [setNodes, token, id, workflow, edges]
   );
 
   const handleNodeDelete = useCallback(
