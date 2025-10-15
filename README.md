@@ -14,6 +14,24 @@
 
 ---
 
+## 🚀 Access Points
+
+| Service | URL | Credentials | Purpose |
+|---------|-----|-------------|---------|
+| **FlowNova App** | [lyzr.jeremylabs.com](https://lyzr.jeremylabs.com/) | admin@gmail.com / admin@1234 | Main application |
+| **Grafana Monitoring** | [lyzr-logs.jeremylabs.com](https://lyzr-logs.jeremylabs.com/login) | `admin` / `admin` | Logs & dashboards |
+| **LiteLLM Gateway** | [lyzr-litellm.jeremylabs.com](https://lyzr-litellm.jeremylabs.com/sso/key/generate) | `admin` / `admin` | LLM proxy & analytics |
+
+## 🎬 Live Demo
+
+### 📸 Screenshots
+
+#### Workflow Builder Interface
+*[Screenshot: Drag-and-drop workflow editor with multiple node types connected]*
+
+<img width="1728" height="914" alt="Screenshot 2025-10-16 at 1 57 42 AM" src="https://github.com/user-attachments/assets/382e1160-f70e-4be0-bf7a-52dd23047cb5" />
+
+
 ## 🧩 Problem Statement
 
 Modern AI systems face a fundamental challenge: **how do you orchestrate complex, multi-step workflows that combine deterministic logic with non-deterministic agentic behavior?**
@@ -238,50 +256,6 @@ else:
 # Data flows through edges to next nodes
 next_node.input = agent_output  # Output becomes input
 ```
-
----
-
-## 🎬 Live Demo
-
-### 🚀 Access Points
-
-| Service | URL | Credentials | Purpose |
-|---------|-----|-------------|---------|
-| **FlowNova App** | [lyzr.jeremylabs.com](https://lyzr.jeremylabs.com/) | Register/Login | Main application |
-| **Grafana Monitoring** | [lyzr-logs.jeremylabs.com](https://lyzr-logs.jeremylabs.com/login) | `admin` / `admin` | Logs & dashboards |
-| **LiteLLM Gateway** | [lyzr-litellm.jeremylabs.com](https://lyzr-litellm.jeremylabs.com/sso/key/generate) | `admin` / `admin` | LLM proxy & analytics |
-
-### 📸 Screenshots
-
-#### Workflow Builder Interface
-*[Screenshot: Drag-and-drop workflow editor with multiple node types connected]*
-
-![Workflow Builder](docs/images/workflow-builder.png)
-
-#### Real-Time Execution Monitoring
-*[Screenshot: Workflow running with nodes highlighted as they execute]*
-
-![Real-Time Execution](docs/images/execution-monitoring.png)
-
-#### Agent Node Configuration
-*[Screenshot: Agent node config form with model selection, prompts, and tools]*
-
-![Agent Configuration](docs/images/agent-config.png)
-
-#### User Approval Flow
-*[Screenshot: User approval modal appearing during workflow execution]*
-
-![User Approval](docs/images/user-approval.png)
-
-#### Execution Ledger & Audit Trail
-*[Screenshot: Detailed ledger showing node inputs/outputs and tool calls]*
-
-![Audit Ledger](docs/images/audit-ledger.png)
-
-#### Tool Registry
-*[Screenshot: Tool management interface with registered APIs]*
-
-![Tool Registry](docs/images/tool-registry.png)
 
 ---
 
