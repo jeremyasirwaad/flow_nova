@@ -85,3 +85,15 @@ class WorkflowResponse(WorkflowBase):
     updated_at: Optional[datetime]
     workflow_nodes: List[WorkflowNodeResponse] = []
     workflow_edges: List[WorkflowEdgeResponse] = []
+
+
+class ApprovalRequest(BaseModel):
+    """Schema for user approval decision."""
+    decision: str = Field(..., description="User decision: 'yes' or 'no'")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "decision": "yes"
+            }
+        }

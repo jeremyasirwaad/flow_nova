@@ -24,8 +24,10 @@ class WorkflowLedger(Base):
         nullable=False,
     )
 
+    node_type = Column(String, nullable=False)
     input_json = Column(JSONB, nullable=True)
     output_json = Column(JSONB, nullable=True)
+    tool_calls = Column(JSONB, nullable=True)  # Stores tool call information if any
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True),

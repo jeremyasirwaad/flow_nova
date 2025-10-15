@@ -7,8 +7,7 @@ import Dashboard from "./pages/app/dashboad";
 import Agents from "./pages/app/agents";
 import Workflows from "./pages/app/workflows";
 import WorkflowEditor from "./pages/app/workflows/[id]";
-import Actions from "./pages/app/actions";
-import Playground from "./pages/app/playgroud";
+import Tools from "./pages/app/tools";
 
 export const router = createBrowserRouter([
   {
@@ -52,12 +51,8 @@ export const router = createBrowserRouter([
         element: <WorkflowEditor />,
       },
       {
-        path: "actions",
-        element: <Actions />,
-      },
-      {
-        path: "playground",
-        element: <Playground />,
+        path: "tools",
+        element: <Tools />,
       },
     ],
   },

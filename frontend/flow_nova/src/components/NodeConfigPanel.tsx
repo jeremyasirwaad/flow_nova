@@ -1,11 +1,46 @@
 import { useState, useEffect } from "react";
 import type { Node } from "reactflow";
+import { useAuth } from "@/context/AuthContext";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 interface NodeConfigPanelProps {
   node: Node | null;
   onClose: () => void;
   onDelete: (nodeId: string) => void;
-  onUpdate: (nodeId: string, data: any) => void;
+  onUpdate: (nodeId: string, data: NodeFormData) => void;
+}
+
+interface NodeFormData {
+  label?: string;
+  description?: string;
+  llm_model?: string;
+  system_prompt?: string;
+  user_prompt?: string;
+  tools?: string[] | string;
+  structured_output?: boolean;
+  structured_output_schema?: string;
+  lhs?: string;
+  condition?: string;
+  rhs?: string;
+  message?: string;
+  guardrail?: string;
+  cognitive_instruction?: string;
+  type?: string;
+  [key: string]: unknown;
+}
+
+interface AgentModel {
+  id: string;
+  object?: string;
+  [key: string]: unknown;
+}
+
+interface Tool {
+  id: string;
+  name: string;
+  description: string;
+  [key: string]: unknown;
 }
 
 export default function NodeConfigPanel({
@@ -14,19 +49,200 @@ export default function NodeConfigPanel({
   onDelete,
   onUpdate,
 }: NodeConfigPanelProps) {
-  const [formData, setFormData] = useState<any>({});
+  const [formData, setFormData] = useState<NodeFormData>({});
   const [errors, setErrors] = useState<string[]>([]);
+  const [models, setModels] = useState<AgentModel[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [tools, setTools] = useState<Tool[]>([]);
+  const [loadingTools, setLoadingTools] = useState(false);
+  const [toolsError, setToolsError] = useState<string | null>(null);
+  const { token } = useAuth();
+
+  const getReferenceHintStyles = (nodeType?: string) => {
+    switch (nodeType) {
+      case "agent":
+        return {
+          container: "bg-purple-50 border-purple-200",
+          text: "text-purple-800",
+          code: "text-purple-700",
+        };
+      case "if_else":
+        return {
+          container: "bg-blue-50 border-blue-200",
+          text: "text-blue-800",
+          code: "text-blue-700",
+        };
+      case "user_approval":
+        return {
+          container: "bg-amber-50 border-amber-200",
+          text: "text-amber-800",
+          code: "text-amber-700",
+        };
+      case "guardrails":
+        return {
+          container: "bg-cyan-50 border-cyan-200",
+          text: "text-cyan-800",
+          code: "text-cyan-700",
+        };
+      case "cognitive":
+        return {
+          container: "bg-indigo-50 border-indigo-200",
+          text: "text-indigo-800",
+          code: "text-indigo-700",
+        };
+      default:
+        return {
+          container: "bg-gray-50 border-gray-200",
+          text: "text-gray-600",
+          code: "text-gray-700",
+        };
+    }
+  };
 
   useEffect(() => {
     if (node) {
-      setFormData(node.data || {});
+      const dataWithoutProvider = { ...(node.data || {}) } as NodeFormData;
+      if ("llm_provider" in dataWithoutProvider) {
+        delete (dataWithoutProvider as Record<string, unknown>)["llm_provider"];
+      }
+      setFormData(dataWithoutProvider);
     }
   }, [node]);
 
+  useEffect(() => {
+    if (!node || node.data?.type !== "agent") {
+      setModels([]);
+      setModelsError(null);
+      setLoadingModels(false);
+      return;
+    }
+
+    if (!token) {
+      setModels([]);
+      setModelsError("Authentication required to load models.");
+      setLoadingModels(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setLoadingModels(true);
+    setModelsError(null);
+
+    const fetchModels = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/agents/models`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch models");
+        }
+
+        const data = await response.json();
+        const modelsList: AgentModel[] = Array.isArray(data?.data) ? data.data : [];
+        setModels(modelsList);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error("Error fetching models:", error);
+        setModels([]);
+        setModelsError("Unable to load models. Please try again.");
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoadingModels(false);
+        }
+      }
+    };
+
+    fetchModels();
+
+    return () => {
+      controller.abort();
+    };
+  }, [node, token]);
+
+  useEffect(() => {
+    if (
+      node?.data?.type === "agent" &&
+      !formData.llm_model &&
+      models.length > 0
+    ) {
+      setFormData((prev: NodeFormData) => ({
+        ...prev,
+        llm_model: prev.llm_model || models[0].id,
+      }));
+    }
+  }, [models, node, formData.llm_model]);
+
+  // Fetch tools for agent nodes
+  useEffect(() => {
+    if (!node || node.data?.type !== "agent") {
+      setTools([]);
+      setToolsError(null);
+      setLoadingTools(false);
+      return;
+    }
+
+    if (!token) {
+      setTools([]);
+      setToolsError("Authentication required to load tools.");
+      setLoadingTools(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setLoadingTools(true);
+    setToolsError(null);
+
+    const fetchTools = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/tools`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch tools");
+        }
+
+        const data = await response.json();
+        const toolsList: Tool[] = Array.isArray(data?.tools) ? data.tools : [];
+        setTools(toolsList);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error("Error fetching tools:", error);
+        setTools([]);
+        setToolsError("Unable to load tools. Please try again.");
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoadingTools(false);
+        }
+      }
+    };
+
+    fetchTools();
+
+    return () => {
+      controller.abort();
+    };
+  }, [node, token]);
+
   if (!node) return null;
 
-  const handleInputChange = (field: string, value: any) => {
-    setFormData((prev: any) => ({ ...prev, [field]: value }));
+  const referenceHintStyles = getReferenceHintStyles(node.data?.type);
+  const selectedModelExists =
+    !!formData.llm_model &&
+    models.some((model) => model.id === formData.llm_model);
+
+  const handleInputChange = (field: string, value: unknown) => {
+    setFormData((prev: NodeFormData) => ({ ...prev, [field]: value }));
     // Clear error for this field when user starts typing
     if (errors.includes(field)) {
       setErrors((prev) => prev.filter((e) => e !== field));
@@ -39,7 +255,6 @@ export default function NodeConfigPanel({
     switch (node.data.type) {
       case "agent":
         if (!formData.description?.trim()) errorFields.push("description");
-        if (!formData.llm_provider?.trim()) errorFields.push("llm_provider");
         if (!formData.llm_model?.trim()) errorFields.push("llm_model");
         if (!formData.system_prompt?.trim()) errorFields.push("system_prompt");
         if (!formData.user_prompt?.trim()) errorFields.push("user_prompt");
@@ -62,6 +277,10 @@ export default function NodeConfigPanel({
       case "guardrails":
         if (!formData.guardrail?.trim()) errorFields.push("guardrail");
         break;
+
+      case "cognitive":
+        if (!formData.cognitive_instruction?.trim()) errorFields.push("cognitive_instruction");
+        break;
     }
 
     return { isValid: errorFields.length === 0, errorFields };
@@ -76,7 +295,21 @@ export default function NodeConfigPanel({
     }
 
     setErrors([]);
-    onUpdate(node.id, formData);
+    const payload: NodeFormData = { ...formData };
+    if ("llm_provider" in payload) {
+      delete (payload as Record<string, unknown>)["llm_provider"];
+    }
+
+    // Ensure tools is always an array for agent nodes
+    if (node.data.type === "agent") {
+      if (!payload.tools || (Array.isArray(payload.tools) && payload.tools.length === 0)) {
+        payload.tools = [];
+      } else if (!Array.isArray(payload.tools)) {
+        payload.tools = [payload.tools as string];
+      }
+    }
+
+    onUpdate(node.id, payload);
     onClose();
   };
 
@@ -129,41 +362,44 @@ export default function NodeConfigPanel({
                 placeholder="Agent description..."
               />
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  LLM Provider <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.llm_provider || ""}
-                  onChange={(e) =>
-                    handleInputChange("llm_provider", e.target.value)
-                  }
-                  className={getInputClassName(
-                    "llm_provider",
-                    "w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  )}
-                  placeholder="e.g., openai"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  LLM Model <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.llm_model || ""}
-                  onChange={(e) => handleInputChange("llm_model", e.target.value)}
-                  className={getInputClassName(
-                    "llm_model",
-                    "w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  )}
-                  placeholder="e.g., gpt-4"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                LLM Model <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={formData.llm_model || ""}
+                onChange={(e) => handleInputChange("llm_model", e.target.value)}
+                disabled={
+                  loadingModels || !!modelsError || models.length === 0
+                }
+                className={getInputClassName(
+                  "llm_model",
+                  "w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                )}
+              >
+                <option value="" disabled={models.length > 0}>
+                  {loadingModels
+                    ? "Loading models..."
+                    : modelsError
+                    ? "Unable to load models"
+                    : models.length === 0
+                    ? "No models available"
+                    : "Select a model"}
+                </option>
+                {!selectedModelExists && formData.llm_model && (
+                  <option value={formData.llm_model}>
+                    {formData.llm_model}
+                  </option>
+                )}
+                {models.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.id}
+                  </option>
+                ))}
+              </select>
+              {modelsError && (
+                <p className="text-xs text-red-500 mt-1">{modelsError}</p>
+              )}
             </div>
 
             <div>
@@ -202,25 +438,69 @@ export default function NodeConfigPanel({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Tools (comma-separated IDs)
+                Tools
               </label>
-              <input
-                type="text"
-                value={
-                  Array.isArray(formData.tools)
-                    ? formData.tools.join(", ")
-                    : formData.tools || ""
-                }
-                onChange={(e) => {
-                  const toolsArray = e.target.value
-                    .split(",")
-                    .map((t) => t.trim())
-                    .filter((t) => t);
-                  handleInputChange("tools", toolsArray);
-                }}
-                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                placeholder="tool_id_1, tool_id_2, tool_id_3"
-              />
+              {loadingTools ? (
+                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-500 text-sm">
+                  Loading tools...
+                </div>
+              ) : toolsError ? (
+                <div className="w-full px-3 py-2 bg-red-50 border border-red-300 rounded-lg text-red-600 text-sm">
+                  {toolsError}
+                </div>
+              ) : tools.length === 0 ? (
+                <div className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-500 text-sm">
+                  No tools available. Create tools first.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-300 rounded-lg p-2 bg-white">
+                  {tools.map((tool) => {
+                    const selectedTools = Array.isArray(formData.tools)
+                      ? formData.tools
+                      : formData.tools
+                      ? [formData.tools]
+                      : [];
+                    const isSelected = selectedTools.includes(tool.id);
+
+                    return (
+                      <label
+                        key={tool.id}
+                        className="flex items-start gap-2 p-2 hover:bg-purple-50 rounded cursor-pointer transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            const currentTools = Array.isArray(formData.tools)
+                              ? formData.tools
+                              : formData.tools
+                              ? [formData.tools]
+                              : [];
+
+                            const newTools = e.target.checked
+                              ? [...currentTools, tool.id]
+                              : currentTools.filter((id) => id !== tool.id);
+
+                            handleInputChange("tools", newTools);
+                          }}
+                          className="mt-1 w-4 h-4 text-purple-600 bg-white border-gray-300 rounded focus:ring-purple-500"
+                        />
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-gray-900">
+                            {tool.name}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {tool.description}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="text-xs text-gray-500 mt-1">
+                Select tools that this agent can use
+              </p>
             </div>
 
             <div>
@@ -289,7 +569,7 @@ export default function NodeConfigPanel({
                   "lhs",
                   "w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 )}
-                placeholder="e.g., input.variable_name"
+                placeholder="e.g., {{input.variable_name}}"
               />
             </div>
 
@@ -414,6 +694,71 @@ export default function NodeConfigPanel({
           </div>
         );
 
+      case "cognitive":
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Node Name
+              </label>
+              <input
+                type="text"
+                value={formData.label || ""}
+                disabled
+                className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-600 cursor-not-allowed"
+                placeholder="Enter node name..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Description
+              </label>
+              <textarea
+                value={formData.description || ""}
+                onChange={(e) => handleInputChange("description", e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                placeholder="What this cognitive node does..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Cognitive Instruction <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={formData.cognitive_instruction || ""}
+                onChange={(e) => handleInputChange("cognitive_instruction", e.target.value)}
+                rows={6}
+                className={getInputClassName(
+                  "cognitive_instruction",
+                  "w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                )}
+                placeholder="Describe the workflow you want the AI to generate and execute..."
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                {formData.cognitive_instruction?.length || 0} characters
+              </p>
+            </div>
+
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+              <p className="text-xs text-indigo-800">
+                <strong>How it works:</strong>
+                <br />
+                1. The AI generates a workflow based on your instruction
+                <br />
+                2. The generated workflow executes autonomously
+                <br />
+                3. Final output is passed to the next node
+                <br />
+                <br />
+                <strong>Example:</strong> "Analyze customer sentiment from reviews, categorize feedback, and generate a summary report"
+              </p>
+            </div>
+          </div>
+        );
+
       default:
         return (
           <div className="space-y-4">
@@ -473,6 +818,8 @@ export default function NodeConfigPanel({
                   ? "bg-amber-100 text-amber-600"
                   : node.data.type === "guardrails"
                   ? "bg-cyan-100 text-cyan-600"
+                  : node.data.type === "cognitive"
+                  ? "bg-indigo-100 text-indigo-600"
                   : "bg-gray-100 text-gray-600"
               }`}
             >
@@ -485,6 +832,18 @@ export default function NodeConfigPanel({
               <p className="text-xs text-gray-500">{node.data.description}</p>
             </div>
           </div>
+        </div>
+
+        <div
+          className={`mb-4 border rounded-lg p-3 ${referenceHintStyles.container}`}
+        >
+          <p className={`text-xs ${referenceHintStyles.text}`}>
+            Use{" "}
+            <code className={`font-mono ${referenceHintStyles.code}`}>
+              {"{{input.variable_name}}"}
+            </code>{" "}
+            to refer the variables.
+          </p>
         </div>
 
         {renderConfigForm()}

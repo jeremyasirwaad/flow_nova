@@ -10,7 +10,6 @@ import ReactFlow, {
   addEdge,
   useNodesState,
   useEdgesState,
-  useReactFlow,
   type Node,
   type Edge,
   type Connection,
@@ -19,6 +18,7 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import toast from "react-hot-toast";
 import { v4 as uuidv4 } from "uuid";
+import { useWorkflowWebSocket } from "@/hooks/useWorkflowWebSocket";
 
 // Import custom node components
 import StartNode from "@/components/workflow-nodes/StartNode";
@@ -27,7 +27,12 @@ import AgentNode from "@/components/workflow-nodes/AgentNode";
 import IfElseNode from "@/components/workflow-nodes/IfElseNode";
 import UserApprovalNode from "@/components/workflow-nodes/UserApprovalNode";
 import GuardrailsNode from "@/components/workflow-nodes/GuardrailsNode";
+import ForkNode from "@/components/workflow-nodes/ForkNode";
+import CognitiveNode from "@/components/workflow-nodes/CognitiveNode";
 import NodeConfigPanel from "@/components/NodeConfigPanel";
+import RunWorkflowModal from "@/components/RunWorkflowModal";
+import RunHistoryPanel from "@/components/RunHistoryPanel";
+import ApprovalModal from "@/components/ApprovalModal";
 
 const nodeTypes = [
   {
@@ -41,6 +46,18 @@ const nodeTypes = [
     label: "User Approval",
     type: "logic",
     description: "Wait for user approval",
+  },
+  {
+    id: "fork",
+    label: "Fork",
+    type: "parallel",
+    description: "Parallel branching",
+  },
+  {
+    id: "cognitive",
+    label: "Cognitive",
+    type: "cognitive",
+    description: "AI workflow generation",
   },
   {
     id: "guardrails",
@@ -74,6 +91,143 @@ export default function WorkflowEditor() {
     useState<ReactFlowInstance | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [isRunModalOpen, setIsRunModalOpen] = useState(false);
+  const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [wsEventHandler, setWsEventHandler] = useState<((event: any) => void) | null>(null);
+  const [approvalModal, setApprovalModal] = useState<{
+    isOpen: boolean;
+    message: string;
+    nodeId: string;
+  }>({
+    isOpen: false,
+    message: "",
+    nodeId: "",
+  });
+  const [isApprovingNode, setIsApprovingNode] = useState(false);
+
+  // WebSocket connection callbacks
+  const handleWebSocketConnected = useCallback(() => {
+    console.log("Connected to workflow WebSocket");
+  }, []);
+
+  const handleRunStarted = useCallback((event: any) => {
+    toast.success("Workflow execution started!");
+    console.log("Run started:", event);
+
+    // Extract run_id from the event
+    const runId = event.run_id || event.data?.run_id;
+    if (runId) {
+      setCurrentRunId(runId);
+    }
+
+    setIsExecuting(true);
+    // Open history panel automatically when execution starts
+    setIsHistoryPanelOpen(true);
+
+    // Forward event to RunHistoryPanel
+    if (wsEventHandler) {
+      wsEventHandler(event);
+    }
+  }, [wsEventHandler]);
+
+  const handleNodeStarted = useCallback((event: any) => {
+    console.log("Node started:", event);
+    // Forward event to RunHistoryPanel
+    if (wsEventHandler) {
+      wsEventHandler(event);
+    }
+  }, [wsEventHandler]);
+
+  const handleNodeCompleted = useCallback((event: any) => {
+    console.log("Node completed:", event);
+    // Forward event to RunHistoryPanel
+    if (wsEventHandler) {
+      wsEventHandler(event);
+    }
+  }, [wsEventHandler]);
+
+  const handleRunCompleted = useCallback((event: any) => {
+    toast.success("Workflow execution completed!");
+    console.log("Run completed:", event);
+    setIsExecuting(false);
+
+    // Keep completed states visible for a moment, then reset after 5 seconds
+    setTimeout(() => {
+      setNodes((nds) =>
+        nds.map((node) => ({
+          ...node,
+          data: {
+            ...node.data,
+            executionState: "idle",
+          },
+        }))
+      );
+    }, 5000);
+  }, [setNodes]);
+
+  const handleWebSocketError = useCallback((error: any) => {
+    console.error("WebSocket error:", error);
+  }, []);
+
+  const handleApprovalNeeded = useCallback((event: any) => {
+    console.log("Approval needed:", event);
+    toast("Workflow paused - Approval required!", { icon: "⏸️" });
+
+    setApprovalModal({
+      isOpen: true,
+      message: event.message || event.data?.message || "Do you want to continue with this workflow?",
+      nodeId: event.node_id || event.data?.node_id || "",
+    });
+  }, []);
+
+  const handleApproval = useCallback(async (decision: "yes" | "no") => {
+    if (!token || !id || !currentRunId || !approvalModal.nodeId) {
+      toast.error("Missing required information for approval");
+      return;
+    }
+
+    try {
+      setIsApprovingNode(true);
+      await workflowService.approveNode(
+        id,
+        currentRunId,
+        approvalModal.nodeId,
+        decision,
+        token
+      );
+
+      toast.success(`Workflow ${decision === "yes" ? "approved" : "rejected"} - Continuing execution`);
+
+      // Close modal
+      setApprovalModal({
+        isOpen: false,
+        message: "",
+        nodeId: "",
+      });
+    } catch (error) {
+      console.error("Failed to approve node:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to approve node"
+      );
+    } finally {
+      setIsApprovingNode(false);
+    }
+  }, [token, id, currentRunId, approvalModal.nodeId]);
+
+  // WebSocket connection for workflow execution events
+  const { nodeExecutionStatus } = useWorkflowWebSocket({
+    workflowId: id || "",
+    token: token || "",
+    onConnected: handleWebSocketConnected,
+    onRunStarted: handleRunStarted,
+    onNodeStarted: handleNodeStarted,
+    onNodeCompleted: handleNodeCompleted,
+    onRunCompleted: handleRunCompleted,
+    onApprovalNeeded: handleApprovalNeeded,
+    onError: handleWebSocketError,
+  });
 
   // Register custom node types
   const customNodeTypes = useMemo(
@@ -84,6 +238,8 @@ export default function WorkflowEditor() {
       if_else: IfElseNode,
       user_approval: UserApprovalNode,
       guardrails: GuardrailsNode,
+      fork: ForkNode,
+      cognitive: CognitiveNode,
     }),
     []
   );
@@ -110,6 +266,8 @@ export default function WorkflowEditor() {
         else if (node.data.type === "if_else") nodeType = "if_else";
         else if (node.data.type === "user_approval") nodeType = "user_approval";
         else if (node.data.type === "guardrails") nodeType = "guardrails";
+        else if (node.data.type === "fork") nodeType = "fork";
+        else if (node.data.type === "cognitive") nodeType = "cognitive";
 
         return {
           id: node.id,
@@ -118,6 +276,7 @@ export default function WorkflowEditor() {
           data: {
             label: node.name,
             ...node.data,
+            executionState: "idle",
           },
         };
       });
@@ -251,23 +410,37 @@ export default function WorkflowEditor() {
     [reactFlowInstance, setNodes]
   );
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-gray-600">Loading workflow...</p>
-      </div>
-    );
-  }
+  // Handle ledger updates from the history panel
+  const handleLedgerUpdate = useCallback((ledgerEntries: any[]) => {
+    // Create a map of node execution states from ledger
+    const nodeStates: { [nodeId: string]: string } = {};
 
-  if (!workflow) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-gray-600">Workflow not found</p>
-      </div>
-    );
-  }
+    ledgerEntries.forEach((entry) => {
+      // If output_json exists, node has completed
+      if (entry.output_json !== null) {
+        nodeStates[entry.node_id] = "completed";
+      } else {
+        // If no output yet, node is executing
+        nodeStates[entry.node_id] = "executing";
+      }
+    });
 
-  const handleSaveWorkflow = async () => {
+    // Update nodes with execution states
+    setNodes((nds) =>
+      nds.map((node) => {
+        const executionState = nodeStates[node.id] || node.data.executionState || "idle";
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            executionState,
+          },
+        };
+      })
+    );
+  }, [setNodes]);
+
+  const handleSaveWorkflow = useCallback(async () => {
     if (!token || !id || !workflow) return;
 
     try {
@@ -309,12 +482,58 @@ export default function WorkflowEditor() {
         error instanceof Error ? error.message : "Failed to save workflow"
       );
     }
-  };
+  }, [token, id, workflow, nodes, edges]);
 
-  const handleRunWorkflow = async () => {
-    // TODO: Implement run workflow functionality
-    toast.success("Workflow execution started!");
-  };
+  const handleRunWorkflow = useCallback(() => {
+    setIsRunModalOpen(true);
+  }, []);
+
+  const handleExecuteWorkflow = useCallback(async (inputData: any) => {
+    if (!token || !id) return;
+
+    try {
+      const result = await workflowService.executeWorkflow(id, inputData, token);
+      console.log("Workflow execution initiated:", result);
+      // Set the current run ID for tracking
+      if (result.run_id) {
+        setCurrentRunId(result.run_id);
+      }
+    } catch (error) {
+      console.error("Failed to execute workflow:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to execute workflow"
+      );
+    }
+  }, [token, id]);
+
+  // Update nodes with execution status - MUST be before early returns to maintain hook order
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          executionState: nodeExecutionStatus[node.id]?.state || "idle",
+        },
+      }))
+    );
+  }, [nodeExecutionStatus, setNodes]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-gray-600">Loading workflow...</p>
+      </div>
+    );
+  }
+
+  if (!workflow) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-gray-600">Workflow not found</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -351,6 +570,33 @@ export default function WorkflowEditor() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsHistoryPanelOpen(!isHistoryPanelOpen)}
+            className={`px-4 py-2 border rounded-lg font-medium transition-colors flex items-center gap-2 ${
+              isHistoryPanelOpen
+                ? "bg-blue-50 border-blue-300 text-blue-700"
+                : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
+            }`}
+            title="View run history"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            History
+            {isExecuting && (
+              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            )}
+          </button>
           <button
             onClick={handleSaveWorkflow}
             className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors flex items-center gap-2"
@@ -417,6 +663,54 @@ export default function WorkflowEditor() {
                 <div
                   key={node.id}
                   className="p-3 bg-blue-50 border border-blue-200 rounded-lg mb-2 cursor-move hover:bg-blue-100 transition-colors"
+                  draggable
+                  onDragStart={(event) => onDragStart(event, node.id, node.label)}
+                >
+                  <div className="text-sm font-medium text-gray-900">
+                    {node.label}
+                  </div>
+                  <div className="text-xs text-gray-600 mt-1">
+                    {node.description}
+                  </div>
+                </div>
+              ))}
+          </div>
+
+          {/* Parallel Nodes */}
+          <div className="mb-4">
+            <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">
+              Parallel Nodes
+            </h4>
+            {nodeTypes
+              .filter((node) => node.type === "parallel")
+              .map((node) => (
+                <div
+                  key={node.id}
+                  className="p-3 bg-purple-50 border border-purple-200 rounded-lg mb-2 cursor-move hover:bg-purple-100 transition-colors"
+                  draggable
+                  onDragStart={(event) => onDragStart(event, node.id, node.label)}
+                >
+                  <div className="text-sm font-medium text-gray-900">
+                    {node.label}
+                  </div>
+                  <div className="text-xs text-gray-600 mt-1">
+                    {node.description}
+                  </div>
+                </div>
+              ))}
+          </div>
+
+          {/* Cognitive Node */}
+          <div className="mb-4">
+            <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">
+              Cognitive Node
+            </h4>
+            {nodeTypes
+              .filter((node) => node.type === "cognitive")
+              .map((node) => (
+                <div
+                  key={node.id}
+                  className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg mb-2 cursor-move hover:bg-indigo-100 transition-colors"
                   draggable
                   onDragStart={(event) => onDragStart(event, node.id, node.label)}
                 >
@@ -535,6 +829,36 @@ export default function WorkflowEditor() {
           onUpdate={handleNodeUpdate}
         />
       )}
+
+      {/* Run Workflow Modal */}
+      <RunWorkflowModal
+        isOpen={isRunModalOpen}
+        onClose={() => setIsRunModalOpen(false)}
+        onSubmit={handleExecuteWorkflow}
+        workflowName={workflow?.name || "Workflow"}
+      />
+
+      {/* Run History Panel */}
+      <RunHistoryPanel
+        workflowId={id || ""}
+        workflowNodes={workflow?.workflow_nodes || []}
+        isOpen={isHistoryPanelOpen}
+        onClose={() => setIsHistoryPanelOpen(false)}
+        currentRunId={currentRunId}
+        isExecuting={isExecuting}
+        onWebSocketEvent={(handler) => setWsEventHandler(() => handler)}
+        onLedgerUpdate={handleLedgerUpdate}
+      />
+
+      {/* Approval Modal */}
+      <ApprovalModal
+        isOpen={approvalModal.isOpen}
+        onClose={() => setApprovalModal({ isOpen: false, message: "", nodeId: "" })}
+        onApprove={handleApproval}
+        message={approvalModal.message}
+        nodeId={approvalModal.nodeId}
+        isSubmitting={isApprovingNode}
+      />
       </div>
     </div>
   );

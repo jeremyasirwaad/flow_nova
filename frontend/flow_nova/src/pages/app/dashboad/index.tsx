@@ -1,8 +1,7 @@
 import { NavLink } from "react-router";
 import { MdSpaceDashboard } from "react-icons/md";
-import { RiTestTubeFill } from "react-icons/ri";
 import { LuWorkflow } from "react-icons/lu";
-import { FaCircleNodes } from "react-icons/fa6";
+import { GiToolbox } from "react-icons/gi";
 
 export default function Dashboard() {
   const cards = [
@@ -15,14 +14,6 @@ export default function Dashboard() {
       path: "/app/dashboard",
     },
     {
-      title: "Playground",
-      description: "Test and experiment with agents",
-      icon: <RiTestTubeFill className="text-3xl" />,
-      bgColor: "bg-blue-100",
-      iconColor: "text-blue-600",
-      path: "/app/playground",
-    },
-    {
       title: "Workflows",
       description: "Automate your processes",
       icon: <LuWorkflow className="text-3xl" />,
@@ -31,12 +22,12 @@ export default function Dashboard() {
       path: "/app/workflows",
     },
     {
-      title: "Actions",
-      description: "Manage custom actions",
-      icon: <FaCircleNodes className="text-3xl" />,
-      bgColor: "bg-orange-100",
-      iconColor: "text-orange-600",
-      path: "/app/actions",
+      title: "Tools",
+      description: "Organize integrations and utilities",
+      icon: <GiToolbox className="text-3xl" />,
+      bgColor: "bg-indigo-100",
+      iconColor: "text-indigo-600",
+      path: "/app/tools",
     },
   ];
 

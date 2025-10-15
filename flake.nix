@@ -35,9 +35,16 @@
           rq
           # Note: rq-scheduler is not available in nixpkgs, but can be used via pip if needed
 
+          # WebSocket support for uvicorn
+          websockets
+          wsproto
+
           # HTTP clients
           httpx
           requests
+
+          # LLM
+          litellm
 
           # Testing
           pytest

@@ -16,7 +16,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.config import settings
 from app.core.database import async_engine, Base
 from app.core.logging import setup_logging
-from app.routes import health, tasks, auth, workflows
+from app.core.websocket_manager import manager
+from app.routes import health, tasks, auth, workflows, websockets, agents, tools
 
 
 @asynccontextmanager
@@ -43,10 +44,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
             await conn.run_sync(Base.metadata.create_all)
         logger.debug("Database tables created")
 
+    # Start WebSocket Redis listener for real-time notifications
+    await manager.start_redis_listener()
+    logger.info("🔌 WebSocket Redis listener started")
+
     yield
 
     # Shutdown
     logger.info(f"👋 Shutting down {settings.app_name}")
+
+    # Stop WebSocket Redis listener
+    await manager.stop_redis_listener()
+    logger.info("🔌 WebSocket Redis listener stopped")
+
     await async_engine.dispose()
 
 
@@ -167,6 +177,9 @@ app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(tasks.router, prefix="/api", tags=["tasks"])
 app.include_router(auth.router, prefix="/api", tags=["auth"])
 app.include_router(workflows.router, prefix="/api", tags=["workflows"])
+app.include_router(agents.router, prefix="/api", tags=["agents"])
+app.include_router(tools.router, prefix="/api", tags=["tools"])
+app.include_router(websockets.router, prefix="/api", tags=["websockets"])
 
 # Optional: Enable test error endpoints for development/testing
 # Uncomment the following lines to enable test endpoints

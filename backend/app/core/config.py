@@ -16,26 +16,30 @@ class Settings(BaseSettings):
     debug: bool = True
     app_port: int = 8000
 
-    # Database
-    postgres_superuser: str = "flownova_admin"
-    postgres_superpass: str = "flownova_admin123"
+    # Database - No hardcoded credentials
+    postgres_superuser: str
+    postgres_superpass: str
     postgres_port: int = 5432
     postgres_host: str = "localhost"
-    app_db: str = "flownova_app_db"
-    app_db_password: str = "flownova_app_db"
+    app_db: str
+    app_db_password: str
 
     # Redis
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_db: int = 1  # Using db 1 for RQ (0 is for LiteLLM)
 
-    # RQ
-    rq_dashboard_username: str = "admin"
-    rq_dashboard_password: str = "admin"
+    # RQ Dashboard - No hardcoded credentials
+    rq_dashboard_username: str
+    rq_dashboard_password: str
 
     # Logging
     loki_url: Optional[str] = "http://localhost:3100/loki/api/v1/push"
     log_level: str = "INFO"
+
+    # External services
+    models_service_url: str = "http://localhost:4000/v1/models"
+    models_service_api_key: Optional[str] = None
 
     model_config = SettingsConfigDict(
         env_file="../.env",

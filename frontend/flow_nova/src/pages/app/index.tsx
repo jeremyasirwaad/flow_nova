@@ -1,31 +1,23 @@
-import { Outlet, NavLink, useNavigate } from "react-router";
+import { Outlet, NavLink } from "react-router";
 import logo from "@/assets/logo.png";
 import { MdSpaceDashboard } from "react-icons/md";
-import { RiTestTubeFill } from "react-icons/ri";
 import { LuWorkflow } from "react-icons/lu";
-import { FaCircleNodes } from "react-icons/fa6";
-import { IoLogOut } from "react-icons/io5";
+import { GiToolbox } from "react-icons/gi";
+import { FaGithub } from "react-icons/fa";
 import { useAuth } from "@/context/AuthContext";
 
 export default function AppLayout() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
 
   const navItems = [
     { name: "Dashboard", path: "/app/dashboard", icon: <MdSpaceDashboard /> },
-    { name: "Playground", path: "/app/playground", icon: <RiTestTubeFill /> },
     {
       name: "Workflows",
       path: "/app/workflows",
       icon: <LuWorkflow />,
     },
-    { name: "Actions", path: "/app/actions", icon: <FaCircleNodes /> },
+    { name: "Tools", path: "/app/tools", icon: <GiToolbox /> },
   ];
-
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
-  };
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -66,22 +58,15 @@ export default function AppLayout() {
 
         {/* Footer */}
         <div className="p-4 border-t border-gray-200">
-          <div className="space-y-2">
-            <NavLink
-              to="/app/settings"
-              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
-            >
-              <span className="text-lg">�</span>
-              <span>Settings</span>
-            </NavLink>
-            <NavLink
-              to="/app/help"
-              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
-            >
-              <span className="text-lg">S</span>
-              <span>Help</span>
-            </NavLink>
-          </div>
+          <a
+            href="https://github.com/jeremyasirwaad/flow_nova"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+          >
+            <FaGithub className="text-xl" />
+            <span>View on GitHub</span>
+          </a>
         </div>
       </aside>
 

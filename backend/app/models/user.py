@@ -36,5 +36,8 @@ class User(Base):
     # Relationship to Workflows
     workflows = relationship("Workflow", back_populates="user", cascade="all, delete-orphan")
 
+    # Relationship to Tools
+    tools = relationship("Tool", back_populates="user", cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"User(id={self.id}, first_name={self.first_name}, last_name={self.last_name})"

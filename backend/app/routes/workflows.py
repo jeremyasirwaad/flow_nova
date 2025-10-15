@@ -1,20 +1,23 @@
 """Workflow routes for CRUD operations."""
 
 from datetime import datetime
-from typing import Annotated, List
+from typing import Annotated, List, Dict, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
+from app.core.queue import get_queue
 from app.models.user import User
 from app.models.workflow import Workflow
 from app.models.workflow_node import WorkflowNode
 from app.models.workflow_edge import WorkflowEdge
-from app.schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowUpdate
+from app.models.workflow_runs import WorkflowRun
+from app.models.workflow_ledger import WorkflowLedger
+from app.schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowUpdate, ApprovalRequest
 from app.routes.auth import get_current_active_user
 
 router = APIRouter()
@@ -262,3 +265,383 @@ async def delete_workflow(
     await db.commit()
 
     return None
+
+
+@router.get("/workflows/{workflow_id}/runs")
+async def get_workflow_runs(
+    workflow_id: UUID,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all runs for a specific workflow."""
+    # Verify workflow exists and belongs to user
+    result = await db.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.user_id == current_user.id,
+            Workflow.is_deleted == False
+        )
+    )
+    workflow = result.scalar_one_or_none()
+
+    if not workflow:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workflow not found"
+        )
+
+    # Get all runs for this workflow
+    result = await db.execute(
+        select(WorkflowRun)
+        .where(WorkflowRun.workflow_id == workflow_id)
+        .order_by(WorkflowRun.created_at.desc())
+    )
+    runs = result.scalars().all()
+
+    return [
+        {
+            "id": str(run.id),
+            "workflow_id": str(run.workflow_id),
+            "node_id": str(run.node_id),
+            "input_json": run.input_json,
+            "output_json": run.output_json,
+            "created_at": run.created_at.isoformat(),
+            "updated_at": run.updated_at.isoformat()
+        }
+        for run in runs
+    ]
+
+
+@router.get("/runs/{run_id}")
+async def get_workflow_run(
+    run_id: UUID,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a specific workflow run by ID."""
+    # Fetch the run with workflow relationship
+    result = await db.execute(
+        select(WorkflowRun)
+        .options(selectinload(WorkflowRun.workflow))
+        .where(WorkflowRun.id == run_id)
+    )
+    run = result.scalar_one_or_none()
+
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workflow run not found"
+        )
+
+    # Verify the workflow belongs to the current user
+    if run.workflow.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+
+    return {
+        "id": str(run.id),
+        "workflow_id": str(run.workflow_id),
+        "node_id": str(run.node_id),
+        "input_json": run.input_json,
+        "output_json": run.output_json,
+        "created_at": run.created_at.isoformat(),
+        "updated_at": run.updated_at.isoformat()
+    }
+
+
+@router.get("/runs/{run_id}/ledger")
+async def get_workflow_ledger_by_run(
+    run_id: UUID,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all ledger entries for a specific workflow run."""
+    # Fetch the run with workflow relationship to verify ownership
+    result = await db.execute(
+        select(WorkflowRun)
+        .options(selectinload(WorkflowRun.workflow))
+        .where(WorkflowRun.id == run_id)
+    )
+    run = result.scalar_one_or_none()
+
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workflow run not found"
+        )
+
+    # Verify the workflow belongs to the current user
+    if run.workflow.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+
+    # Get all ledger entries for this run
+    result = await db.execute(
+        select(WorkflowLedger)
+        .where(WorkflowLedger.run_id == run_id)
+        .order_by(WorkflowLedger.created_at.desc())
+    )
+    ledger_entries = result.scalars().all()
+
+    return [
+        {
+            "id": str(entry.id),
+            "workflow_id": str(entry.workflow_id),
+            "node_id": str(entry.node_id),
+            "run_id": str(entry.run_id),
+            "node_type": entry.node_type,
+            "input_json": entry.input_json,
+            "output_json": entry.output_json,
+            "tool_calls": entry.tool_calls,
+            "created_at": entry.created_at.isoformat(),
+            "updated_at": entry.updated_at.isoformat()
+        }
+        for entry in ledger_entries
+    ]
+
+
+@router.post("/workflows/{workflow_id}/execute")
+async def execute_workflow(
+    workflow_id: UUID,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    input_data: Dict[str, Any] = Body(default={}),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Execute a workflow and return the run_id.
+
+    The workflow will be executed asynchronously via RQ worker.
+    Connect to the WebSocket endpoint with the returned run_id to receive real-time updates.
+
+    Example:
+        POST /api/workflows/{workflow_id}/execute
+        Body: {"param1": "value1", "param2": "value2"}
+
+        Returns: {"run_id": "uuid-here", "workflow_id": "uuid-here"}
+
+        Then connect to: ws://localhost:8000/api/ws/workflows/{run_id}
+    """
+    # Verify workflow exists and belongs to user
+    result = await db.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.user_id == current_user.id,
+            Workflow.is_deleted == False
+        )
+    )
+    workflow = result.scalar_one_or_none()
+
+    if not workflow:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workflow not found"
+        )
+
+    # Enqueue workflow execution
+    # Import here to avoid circular dependency
+    from app.engine.engine import run_node
+
+    q = get_queue("node-runner")
+    job = q.enqueue(
+        run_node,
+        str(workflow_id),
+        "start_node",
+        str(current_user.id),
+        input_data,
+        None  # run_id will be created by the engine
+    )
+
+    return {
+        "success": True,
+        "message": "Workflow execution started",
+        "workflow_id": str(workflow_id),
+        "job_id": job.id,
+        "note": "The run_id will be available once the workflow starts executing. Connect to the WebSocket endpoint to receive real-time updates."
+    }
+
+
+@router.post("/workflows/{workflow_id}/runs/{run_id}/nodes/{node_id}/approve")
+async def approve_workflow_node(
+    workflow_id: UUID,
+    run_id: UUID,
+    node_id: UUID,
+    approval_data: ApprovalRequest,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Resume workflow execution after user approval/rejection.
+
+    This endpoint is called when a user approval node is waiting for input.
+    It re-enqueues the same node with the user's decision, allowing the
+    workflow to continue execution.
+
+    Args:
+        workflow_id: The workflow ID
+        run_id: The workflow run ID
+        node_id: The user approval node ID
+        approval_data: Contains the user's decision ('yes' or 'no')
+
+    Returns:
+        Success response with run_id
+    """
+    # Verify workflow exists and belongs to user
+    result = await db.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.user_id == current_user.id,
+            Workflow.is_deleted == False
+        )
+    )
+    workflow = result.scalar_one_or_none()
+
+    if not workflow:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workflow not found"
+        )
+
+    # Verify the run exists and belongs to this workflow
+    result = await db.execute(
+        select(WorkflowRun).where(
+            WorkflowRun.id == run_id,
+            WorkflowRun.workflow_id == workflow_id
+        )
+    )
+    run = result.scalar_one_or_none()
+
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workflow run not found"
+        )
+
+    # Get the most recent ledger entry for this node to retrieve the input
+    result = await db.execute(
+        select(WorkflowLedger)
+        .where(
+            WorkflowLedger.run_id == run_id,
+            WorkflowLedger.node_id == node_id
+        )
+        .order_by(WorkflowLedger.created_at.desc())
+    )
+    ledger_entry = result.scalars().first()
+
+    if not ledger_entry:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No ledger entry found for this node"
+        )
+
+    # Check if this node is actually waiting for approval
+    if ledger_entry.output_json.get("status") != "waiting_for_approval":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This node is not waiting for approval"
+        )
+
+    # Prepare input with the user's decision
+    input_with_decision = {
+        **(ledger_entry.input_json or {}),
+        "user_decision": approval_data.decision
+    }
+
+    # Re-enqueue the SAME node with the decision
+    # This will trigger the second phase of the user_approval_handler
+    from app.engine.engine import run_node
+
+    q = get_queue("node-runner")
+    job = q.enqueue(
+        run_node,
+        str(workflow_id),
+        str(node_id),  # Resume from the SAME node
+        str(current_user.id),
+        input_with_decision,
+        run_id  # Continue the same run
+    )
+
+    return {
+        "success": True,
+        "message": f"Workflow resumed with decision: {approval_data.decision}",
+        "run_id": str(run_id),
+        "workflow_id": str(workflow_id),
+        "node_id": str(node_id),
+        "job_id": job.id
+    }
+
+
+@router.post("/runs/{run_id}/replay")
+async def replay_workflow_run(
+    run_id: UUID,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Replay a workflow run using the original input data.
+
+    This creates a new workflow run with the same input as the original run,
+    executing the workflow with its current structure.
+
+    Args:
+        run_id: The ID of the run to replay
+
+    Returns:
+        Success response with job information
+    """
+    # Fetch the run with workflow relationship
+    result = await db.execute(
+        select(WorkflowRun)
+        .options(selectinload(WorkflowRun.workflow))
+        .where(WorkflowRun.id == run_id)
+    )
+    run = result.scalar_one_or_none()
+
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workflow run not found"
+        )
+
+    # Verify the workflow belongs to the current user
+    if run.workflow.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+
+    # Verify workflow is not deleted
+    if run.workflow.is_deleted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot replay run - workflow has been deleted"
+        )
+
+    # Extract original input data
+    original_input = run.input_json or {}
+
+    # Enqueue workflow execution with original input
+    from app.engine.engine import run_node
+
+    q = get_queue("node-runner")
+    job = q.enqueue(
+        run_node,
+        str(run.workflow_id),
+        "start_node",
+        str(current_user.id),
+        original_input,
+        None  # Creates a new run
+    )
+
+    return {
+        "success": True,
+        "message": "Workflow replay started",
+        "original_run_id": str(run_id),
+        "workflow_id": str(run.workflow_id),
+        "job_id": job.id,
+        "input_data": original_input,
+        "note": "A new run will be created. Connect to the WebSocket endpoint to receive real-time updates."
+    }
