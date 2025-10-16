@@ -31,7 +31,7 @@ export default function RunWorkflowModal({
     } else if (name.includes("user approval")) {
       return { start: "none" };
     } else if (name.includes("customer support") || name.includes("ticket handler")) {
-      return { input: "Go kill yourself" };
+      return { ticket: "I need help with my order, do get back when available" };
     } else {
       // Default example
       return {
